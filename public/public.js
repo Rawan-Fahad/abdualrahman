@@ -13,32 +13,75 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// طريقة بسيطة وقوية لاستخراج uid من الرابط
-let userId = null;
-
-// افحص الرابط كله للبحث عن uid=
+const container = document.getElementById('accountsListPublic');
 const fullUrl = window.location.href;
-const match = fullUrl.match(/uid=([^&]+)/);
+
+// استخراج المعرف من الرابط (يدعم id و uid)
+let identifier = null;
+
+// ابحث عن id= أو uid=
+let match = fullUrl.match(/[?&]id=([^&]+)/);
 if (match && match[1]) {
-    userId = match[1];
+    identifier = match[1];
+    console.log("تم استخراج id:", identifier);
 }
 
-console.log("UID المستخرج:", userId);
+if (!identifier) {
+    match = fullUrl.match(/[?&]uid=([^&]+)/);
+    if (match && match[1]) {
+        identifier = match[1];
+        console.log("تم استخراج uid:", identifier);
+    }
+}
+
 console.log("الرابط الكامل:", fullUrl);
 
-const container = document.getElementById('accountsListPublic');
-
-if (!userId) {
+if (!identifier) {
     container.innerHTML = `
         <div style="text-align:center; padding:20px;">
-            <p style="color:red;">❌ لم يتم العثور على UID في الرابط</p>
-            <p>الرابط الحالي: <code>${fullUrl}</code></p>
-            <p>الرابط الصحيح يجب أن يكون: <code>${window.location.origin}/public.html?uid=معرف_المستخدم</code></p>
+            <p style="color:red;">❌ لم يتم العثور على معرف المستخدم في الرابط</p>
+            <p>الرابط الحالي: <code>${escapeHTML(fullUrl)}</code></p>
+            <p>الرابط الصحيح يجب أن يكون مثل: <code>${window.location.origin}/public/?id=xxxxx</code></p>
+            <hr>
+            <p>💡 للحصول على الرابط الصحيح، اضغط على زر "مشاركة" داخل حسابك.</p>
         </div>
     `;
 } else {
     container.innerHTML = '<p style="text-align:center;">⏳ جاري تحميل الحسابات...</p>';
-    loadAccounts(userId);
+    // تحويل المعرف القصير إلى userId كامل
+    resolveIdentifier(identifier);
+}
+
+// دالة لتحويل المعرف القصير (id) إلى userId كامل
+async function resolveIdentifier(identifier) {
+    try {
+        let userId = null;
+        
+        // إذا كان المعرف يبدو مثل المعرف القصير (أقل من 20 حرفاً)
+        if (identifier.length < 20) {
+            // ابحث في مجموعة shortLinks
+            const shortLinksRef = collection(db, 'shortLinks');
+            const q = query(shortLinksRef, where("shortId", "==", identifier));
+            const snapshot = await getDocs(q);
+            
+            if (!snapshot.empty) {
+                userId = snapshot.docs[0].data().userId;
+                console.log("تم تحويل المعرف القصير إلى userId:", userId);
+            }
+        }
+        
+        // إذا لم يتم العثور على userId، حاول استخدام المعرف نفسه كـ userId
+        if (!userId) {
+            userId = identifier;
+        }
+        
+        // الآن قم بتحميل الحسابات
+        await loadAccounts(userId);
+        
+    } catch (err) {
+        console.error("خطأ في حل المعرف:", err);
+        container.innerHTML = `<p style="color:red; text-align:center;">⚠️ خطأ: ${escapeHTML(err.message)}</p>`;
+    }
 }
 
 async function loadAccounts(uid) {
@@ -65,9 +108,16 @@ async function loadAccounts(uid) {
             `;
             container.appendChild(card);
         });
+        
+        // إضافة تذييل
+        const footer = document.createElement("div");
+        footer.style.cssText = "text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #888;";
+        footer.innerHTML = '✓ تم عرض الحسابات بنجاح';
+        container.appendChild(footer);
+        
     } catch (err) {
-        console.error(err);
-        container.innerHTML = `<p style="color:red; text-align:center;">⚠️ خطأ: ${err.message}</p>`;
+        console.error("خطأ في تحميل الحسابات:", err);
+        container.innerHTML = `<p style="color:red; text-align:center;">⚠️ خطأ في تحميل البيانات: ${escapeHTML(err.message)}</p>`;
     }
 }
 
