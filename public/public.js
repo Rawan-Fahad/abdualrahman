@@ -14,6 +14,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const container = document.getElementById('accountsListPublic');
+const usernameDisplaySpan = document.getElementById('usernameDisplay');
 const fullUrl = window.location.href;
 
 // استخراج المعرف القصير (id) من الرابط
@@ -34,8 +35,10 @@ if (!shortId) {
             <p>الرجاء استخدام رابط المشاركة من داخل حسابك.</p>
         </div>
     `;
+    if (usernameDisplaySpan) usernameDisplaySpan.innerText = "غير معروف";
 } else {
     container.innerHTML = '<p style="text-align:center;">⏳ جاري تحميل الحسابات...</p>';
+    if (usernameDisplaySpan) usernameDisplaySpan.innerText = "جاري التحميل...";
     // البحث عن userId المرتبط بالمعرف القصير
     findUserIdByShortId(shortId);
 }
@@ -49,18 +52,20 @@ async function findUserIdByShortId(shortId) {
         
         if (snapshot.empty) {
             container.innerHTML = '<p style="text-align:center; color:red;">❌ رابط غير صالح أو منتهي الصلاحية</p>';
+            if (usernameDisplaySpan) usernameDisplaySpan.innerText = "غير موجود";
             return;
         }
         
         const userId = snapshot.docs[0].data().userId;
         console.log("تم العثور على userId:", userId);
         
-        // تحميل الحسابات
+        // تحميل الحسابات وعرض اسم المستخدم
         await loadAccounts(userId);
         
     } catch (err) {
         console.error("خطأ:", err);
         container.innerHTML = `<p style="color:red; text-align:center;">⚠️ خطأ: ${escapeHTML(err.message)}</p>`;
+        if (usernameDisplaySpan) usernameDisplaySpan.innerText = "خطأ";
     }
 }
 
@@ -73,12 +78,31 @@ async function loadAccounts(uid) {
         
         if (snapshot.empty) {
             container.innerHTML = '<p style="text-align:center;">😞 لا توجد حسابات منشورة لهذا المستخدم.</p>';
+            if (usernameDisplaySpan) usernameDisplaySpan.innerText = "لا توجد حسابات";
             return;
         }
         
-        container.innerHTML = "";
+        // محاولة استخراج اسم المستخدم من أول حساب (أو يمكنك تخزينه في مكان منفصل)
+        let username = null;
+        const accountsList = [];
+        
         snapshot.forEach(doc => {
             const data = doc.data();
+            accountsList.push(data);
+            // إذا لم نجد اسم المستخدم بعد، خذه من أول حساب
+            if (!username && data.username) {
+                username = data.username;
+            }
+        });
+        
+        // عرض اسم المستخدم في العنوان
+        if (usernameDisplaySpan) {
+            usernameDisplaySpan.innerText = username || "المستخدم";
+        }
+        
+        // عرض الحسابات
+        container.innerHTML = "";
+        accountsList.forEach(data => {
             const card = document.createElement("div");
             card.style.cssText = "background: #f8f9fa; border-radius: 12px; padding: 15px; margin-bottom: 12px; border-right: 5px solid #2a5298; text-align: right;";
             card.innerHTML = `
@@ -92,6 +116,7 @@ async function loadAccounts(uid) {
     } catch (err) {
         console.error("خطأ في تحميل الحسابات:", err);
         container.innerHTML = `<p style="color:red; text-align:center;">⚠️ خطأ في تحميل البيانات: ${escapeHTML(err.message)}</p>`;
+        if (usernameDisplaySpan) usernameDisplaySpan.innerText = "خطأ";
     }
 }
 
