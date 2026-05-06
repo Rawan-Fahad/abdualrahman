@@ -1,4 +1,3 @@
-
 import { auth, db } from './firebase-config.js';
 import { 
     signInWithEmailAndPassword, 
@@ -72,7 +71,7 @@ authForm.onsubmit = (e) => e.preventDefault();
 loginBtn.onclick = () => login(emailInput.value, passwordInput.value);
 signupBtn.onclick = () => signup(emailInput.value, passwordInput.value);
 
-// ---------- عمليات CRUD للحسابات البسيطة ----------
+// ---------- عمليات CRUD للحسابات ----------
 async function loadAccounts() {
     if (!currentUser) return;
     const q = query(accountsRef, where("userId", "==", currentUser.uid));
@@ -98,7 +97,6 @@ function displayAccountCard(id, account) {
             <button class="delete" data-id="${id}">🗑️ حذف</button>
         </div>
     `;
-    // أحداث التعديل والحذف
     card.querySelector('.edit').onclick = () => editAccount(id, account);
     card.querySelector('.delete').onclick = () => deleteAccount(id);
     accountsList.appendChild(card);
@@ -121,7 +119,6 @@ addAccountBtn.onclick = async () => {
             url: url,
             createdAt: new Date()
         });
-        // مسح الحقول
         document.getElementById('platform').value = '';
         document.getElementById('username').value = '';
         document.getElementById('url').value = '';
@@ -167,40 +164,65 @@ function escapeHtml(str) {
         return m;
     });
 }
-// زر المشاركة - إنشاء رابط عام
-// زر المشاركة - نسخ الرابط العام
-// زر المشاركة - نسخ الرابط العام
+
+// ========== زر المشاركة - الرابط العام ==========
+// دالة لإنشاء معرف قصير (لإخفاء الـ UID الكامل)
+function getShortId(uid) {
+    // خذ أول 6 حروف وآخر 4 حروف من الـ UID
+    return uid.substring(0, 6) + uid.substring(uid.length - 4);
+}
+
+// دالة للحصول على المسار الأساسي للموقع (يعمل تلقائياً)
+function getBasePath() {
+    const pathname = window.location.pathname;
+    // إذا كان المسار ينتهي بـ /، احذف آخر جزء
+    if (pathname.endsWith('/')) {
+        return pathname.slice(0, -1);
+    }
+    return pathname;
+}
+
 const shareBtn = document.getElementById('shareBtn');
 if (shareBtn) {
     shareBtn.onclick = async () => {
-        console.log("1- زر المشاركة تم الضغط عليه");
-        
         if (!currentUser) {
-            console.log("2- لا يوجد مستخدم مسجل دخول");
             alert('الرجاء تسجيل الدخول أولاً');
             return;
         }
         
-        console.log("2- المستخدم الحالي:", currentUser);
         const uid = currentUser.uid;
-        console.log("3- UID المستخدم:", uid);
+        const shortId = getShortId(uid); // معرف قصير بدلاً من المعرف الكامل
+        const origin = window.location.origin;
+        const basePath = getBasePath();
         
-        const baseUrl = window.location.origin;
-        console.log("4- Base URL:", baseUrl);
+        // بناء الرابط العام (مع إخفاء الـ UID الكامل)
+        const publicLink = `${origin}${basePath}/public/?id=${shortId}`;
         
-        const publicLink = `${baseUrl}/public/?uid=${uid}`;
-        console.log("5- الرابط العام النهائي:", publicLink);
+        console.log("الرابط العام:", publicLink);
+        
+        // حفظ العلاقة بين المعرف القصير والـ UID الكامل في Firebase
+        try {
+            const linksRef = collection(db, 'shortLinks');
+            const q = query(linksRef, where("shortId", "==", shortId));
+            const snapshot = await getDocs(q);
+            
+            if (snapshot.empty) {
+                await addDoc(linksRef, {
+                    shortId: shortId,
+                    userId: uid,
+                    createdAt: new Date()
+                });
+            }
+        } catch (err) {
+            console.warn("خطأ في حفظ الرابط:", err);
+        }
         
         // نسخ الرابط
         try {
             await navigator.clipboard.writeText(publicLink);
             alert(`✅ تم نسخ الرابط العام!\n\n${publicLink}\n\nيمكنك إرساله لأي شخص لمشاهدة حساباتك`);
-            console.log("6- تم النسخ بنجاح");
         } catch (err) {
-            console.error("7- فشل النسخ:", err);
             alert(`انسخ الرابط يدوياً:\n${publicLink}`);
         }
     };
-
-
 }
